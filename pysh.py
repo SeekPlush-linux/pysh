@@ -2,6 +2,8 @@ import os
 print("pysh: Imported `os'")
 import sys
 print("pysh: Imported `sys'")
+import re
+print("pysh: Imported `re'")
 import socket
 print("pysh: Imported `socket'")
 import json
@@ -18,17 +20,17 @@ from prompt_toolkit.completion import Completer, Completion
 print("pysh: Imported `Completer' from `prompt_toolkit.completion'")
 print("pysh: Imported `Completion' from `prompt_toolkit.completion'")
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 PY_VER = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
 print("pysh: Internal variables set")
 
 if len(sys.argv) > 1:
     if sys.argv[1] == "--version":
-        print("\u001b[11A\u001b[0J", end="")
+        print("\u001b[12A\u001b[0J", end="")
         print(f"pysh, version {VERSION}(1)-release (python-{PY_VER})")
         sys.exit(0)
     elif sys.argv[1] == "--help":
-        print("\u001b[11A\u001b[0J", end="")
+        print("\u001b[12A\u001b[0J", end="")
         print(f"""Usage: pysh [OPTION]
 Options:
   --login    Launch pysh as a login shell
@@ -116,6 +118,23 @@ os_version = os.uname().release
 # def _(event):
 #     pass
 
+def expand_variables(text):
+    pattern = r'\${([a-zA-Z0-9_]+)}'
+    while re.search(pattern, text):
+        match = re.search(pattern, text)
+        var_name = match.group(1)
+        var_value = globals().get(f'bashvar_{var_name}', os.environ.get(var_name, ''))
+        text = text[:match.start()] + var_value + text[match.end():]
+
+    pattern = r'\$([a-zA-Z0-9_]+)'
+    while re.search(pattern, text):
+        match = re.search(pattern, text)
+        var_name = match.group(1)
+        var_value = globals().get(f'bashvar_{var_name}', os.environ.get(var_name, ''))
+        text = text[:match.start()] + var_value + text[match.end():]
+
+    return text
+
 print("pysh: Optional settings and features loaded")
 
 if len(sys.argv) > 1 and sys.argv[1] == "--login":
@@ -149,7 +168,7 @@ else:
     login = os.getlogin()
     print("pysh: All started correctly.  Launching shell...")
     time.sleep(0.05)
-    print("\u001b[14A", end="")
+    print("\u001b[15A", end="")
 
 while True:
     try:
@@ -165,6 +184,7 @@ while True:
             ).strip()
         for input_command in user_input.split(";"):
             user_input = input_command
+            user_input = expand_variables(user_input.strip())
             if user_input == "":
                 continue
             elif user_input.strip().find(" > ") > 0:
@@ -182,6 +202,9 @@ while True:
                             print(f"pysh: {command.split()[0]}: command not found")
                 except Exception as e:
                     print(f"pysh: {e}")
+            elif re.search(r'[a-zA-Z0-9_]+=.*', user_input):
+                var_name, var_value = user_input.split('=', 1)
+                globals()[f'bashvar_{var_name}'] = var_value
             elif user_input == "help" or user_input.startswith("help "):
                 print(f"""pysh, version {VERSION}(1)-release (python-{PY_VER})
 These shell commands are defined internally.  Type `help' to see this list.
@@ -201,6 +224,7 @@ These shell commands are defined internally.  Type `help' to see this list.
  sleep n
  touch file
  true
+ variables - Names and meanings of some shell variables
  whoami""")
             elif user_input == "exit" or user_input.startswith("exit "):
                 if user_input.startswith("exit "):
